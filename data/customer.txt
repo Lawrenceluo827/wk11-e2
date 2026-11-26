@@ -1,0 +1,11 @@
+customer_id,customer_name,region,signup_date
+C001,Chan Tai Man,Hong Kong,2024-01-12
+C002,Lee Siu Ming,Hong Kong,2024-02-03
+C003,Wong Ka Yan,Kowloon,2024-02-18
+C004,Chen Wei,Mainland,2024-03-01
+C005,Tanaka Hiro,Japan,2024-03-15
+C006,Muller Hans,Europe,2024-03-22
+C007,Smith John,North America,2024-04-02
+C008,Ng Wai Ling,Kowloon,2024-04-19
+C009,Zhao Min,Mainland,2024-05-06
+C010,Brown Emily,North America,2024-05-30

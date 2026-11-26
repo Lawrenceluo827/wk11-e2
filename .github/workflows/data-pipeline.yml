@@ -1,0 +1,64 @@
+name: Data pipeline
+
+# TRIGGER: any push that touches a file inside data/ (new order file, edits, ...)
+on:
+  push:
+    branches: [main]
+    paths:
+      - "data/**"
+  workflow_dispatch:
+
+# Needed to push the rebuilt SQLite database back to the repository.
+permissions:
+  contents: write
+
+concurrency:
+  group: data-pipeline-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rebuild-database:
+    name: Clean, merge and publish SQLite database
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run clean_and_merge pipeline
+        run: python clean_and_merge.py
+
+      - name: Show database contents (log only)
+        run: |
+          python - <<'PY'
+          import sqlite3
+          with sqlite3.connect("orders.db") as conn:
+              for table in ("orders_merged", "region_summary"):
+                  rows = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                  print(f"{table}: {rows} rows")
+          PY
+
+      # Actions runs in the cloud: the updated .db must be committed back,
+      # otherwise a local `git pull` would not show the new data.
+      - name: Commit and push updated database
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add orders.db
+          if git diff --cached --quiet; then
+            echo "Database unchanged - nothing to commit."
+          else
+            git commit -m "chore(data): rebuild orders.db from data/ [skip ci]"
+            git push
+          fi
