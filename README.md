@@ -36,6 +36,16 @@ Data rules applied by `clean_and_merge.py`:
 | Store | tables `orders_merged` and `region_summary` in `orders.db` |
 | Summary | `avg(amount_cny)`, order count and total per `region` |
 
+Official course files use the minimal schema and are supported as-is:
+
+```
+order.txt     order_id,customer_id,amount,currency
+customer.txt  customer_id,customer_name,region
+```
+
+The Flask page adapts to the columns that actually exist, so no date/product
+columns are required.
+
 ## Demonstrate the pipeline (step F of the handout)
 
 1. Create `data/order_new.txt` with one or two extra records:

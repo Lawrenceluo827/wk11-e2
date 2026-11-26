@@ -2,6 +2,10 @@
 
 Reads ``orders.db`` on every request, so any change made by the GitHub Actions
 data workflow is visible as soon as the database file is pulled / refreshed.
+
+The page adapts to whatever columns exist in the database, so it works both
+with the official minimal schema (order_id, customer_id, amount, currency,
+amount_cny, customer_name, region) and with richer versions.
 """
 
 from __future__ import annotations
@@ -25,29 +29,42 @@ def db_version() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
 
 
-def query(sql: str) -> tuple[list[str], list[dict]]:
+def fetch_table(table: str) -> tuple[list[str], list[dict]]:
+    """SELECT * from a table and return (columns, rows)."""
     if not DB_PATH.exists():
         return [], []
-    with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=5) as conn:
-        conn.row_factory = sqlite3.Row
-        cursor = conn.execute(sql)
-        columns = [c[0] for c in cursor.description] if cursor.description else []
-        return columns, [dict(row) for row in cursor.fetchall()]
+    try:
+        with sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True, timeout=5) as conn:
+            conn.row_factory = sqlite3.Row
+            cursor = conn.execute(f"SELECT * FROM {table}")
+            columns = [d[0] for d in cursor.description] if cursor.description else []
+            return columns, [dict(row) for row in cursor.fetchall()]
+    except sqlite3.Error:
+        return [], []
+
+
+def sort_rows(columns: list[str], rows: list[dict], numeric: str | None = None) -> list[dict]:
+    """Sort by date/id when those columns exist, otherwise by a numeric column."""
+    keys = [c for c in ("order_date", "order_id") if c in columns]
+    if keys:
+        return sorted(rows, key=lambda r: tuple(str(r.get(k) or "") for k in keys))
+    if numeric and numeric in columns:
+        return sorted(rows, key=lambda r: r.get(numeric) or 0, reverse=True)
+    return rows
 
 
 @app.route("/")
 def index() -> str:
-    order_cols, orders = query(
-        f"SELECT order_id, customer_id, order_date, product, amount, currency, "
-        f"amount_cny, region FROM {ORDER_TABLE} ORDER BY order_date, order_id"
-    )
-    summary_cols, summary = query(
-        f"SELECT region, avg_amount_cny, order_count, total_amount_cny "
-        f"FROM {SUMMARY_TABLE} ORDER BY avg_amount_cny DESC"
-    )
+    order_cols, orders = fetch_table(ORDER_TABLE)
+    orders = sort_rows(order_cols, orders)
+
+    summary_cols, summary = fetch_table(SUMMARY_TABLE)
+    summary = sort_rows(summary_cols, summary, numeric="avg_amount_cny")
+
+    revenue = sum(r.get("amount_cny") or 0 for r in orders)
     totals = {
         "orders": len(orders),
-        "revenue": round(sum(r["amount_cny"] or 0 for r in orders), 2),
+        "revenue": round(revenue, 2),
         "regions": len(summary),
     }
     return render_template(
